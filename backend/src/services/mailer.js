@@ -21,15 +21,45 @@
  * without any SMTP setup.
  */
 
+/*
+ * Email delivery — Brevo HTTP API (primary) with Gmail SMTP as a local-dev
+ * fallback.
+ *
+ * Why not just Gmail SMTP everywhere? Render's free tier blocks outbound
+ * traffic on SMTP ports 25/465/587 entirely (a platform-wide anti-spam
+ * policy since Sept 2025) — so Gmail SMTP times out in production no matter
+ * how correctly it's configured. Brevo's API sends over regular HTTPS
+ * (port 443), which isn't blocked, and its free tier (300 emails/day) is
+ * more than enough for a single store's OTP + order-update volume.
+ *
+ * Brevo setup (~3 minutes, no cost):
+ *   1. Sign up at https://app.brevo.com/ (free).
+ *   2. Settings -> SMTP & API -> API Keys -> Generate a new API key.
+ *   3. Senders, Domains & Dedicated IPs -> Senders -> Add a Sender (use the
+ *      same Gmail address, or any address you control) -> verify it via the
+ *      confirmation email Brevo sends.
+ *   4. Put the API key into backend/.env (and Render's environment) as
+ *      BREVO_API_KEY, and the verified sender address as BREVO_SENDER_EMAIL.
+ *
+ * With no BREVO_API_KEY set, this falls back to Gmail SMTP (works fine for
+ * local development, where SMTP isn't blocked). With neither configured,
+ * emails are printed to the console instead — so OTP login still works
+ * end-to-end without any setup at all.
+ */
+
+const BREVO_API_KEY = process.env.BREVO_API_KEY || "";
+const BREVO_SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_USER || "";
 const GMAIL_USER = process.env.GMAIL_USER || "";
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || "";
 const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || "Tanvi Luxury Store";
 
-const MAIL_CONFIGURED = !!(GMAIL_USER && GMAIL_APP_PASSWORD);
+const BREVO_CONFIGURED = !!(BREVO_API_KEY && BREVO_SENDER_EMAIL);
+const GMAIL_CONFIGURED = !!(GMAIL_USER && GMAIL_APP_PASSWORD);
+const MAIL_CONFIGURED = BREVO_CONFIGURED || GMAIL_CONFIGURED;
 
 let transporter = null;
 function getTransporter() {
-  if (!MAIL_CONFIGURED) return null;
+  if (!GMAIL_CONFIGURED) return null;
   if (transporter) return transporter;
   const nodemailer = require("nodemailer");
   transporter = nodemailer.createTransport({
@@ -39,27 +69,52 @@ function getTransporter() {
   return transporter;
 }
 
+async function sendViaBrevo({ to, subject, html, text }) {
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": BREVO_API_KEY,
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify({
+      sender: { name: MAIL_FROM_NAME, email: BREVO_SENDER_EMAIL },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Brevo API responded ${res.status}: ${body}`);
+  }
+}
+
 /**
  * Sends `html`/`subject` to `to`. Returns { sent, devFallback }.
  * When mail isn't configured (or sending fails), logs to the console
- * instead of throwing, so the app keeps working without SMTP set up.
+ * instead of throwing, so the app keeps working without email set up.
  * Order-status emails are non-critical (the order is already placed), so
  * callers there can ignore devFallback; OTP emails should surface it.
  */
 async function sendMail({ to, subject, html, text }) {
-  const t = getTransporter();
-  if (!t) {
-    console.log(`[mailer] GMAIL_USER/GMAIL_APP_PASSWORD not set — email to ${to} ("${subject}") was not sent.`);
+  if (!MAIL_CONFIGURED) {
+    console.log(`[mailer] No email provider configured — email to ${to} ("${subject}") was not sent.`);
     return { sent: false, devFallback: true };
   }
   try {
-    await t.sendMail({
-      from: `"${MAIL_FROM_NAME}" <${GMAIL_USER}>`,
-      to,
-      subject,
-      html,
-      text,
-    });
+    if (BREVO_CONFIGURED) {
+      await sendViaBrevo({ to, subject, html, text });
+    } else {
+      await getTransporter().sendMail({
+        from: `"${MAIL_FROM_NAME}" <${GMAIL_USER}>`,
+        to,
+        subject,
+        html,
+        text,
+      });
+    }
     return { sent: true, devFallback: false };
   } catch (e) {
     console.error(`[mailer] failed to send email to ${to}:`, e.message);
