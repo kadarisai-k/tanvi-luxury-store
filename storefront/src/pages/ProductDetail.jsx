@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Minus, Plus, ShoppingBag, Check } from "lucide-react";
+import { Minus, Plus, ShoppingBag, Check, ChevronDown } from "lucide-react";
 import Layout from "../components/Layout";
 import { getProductBySlug } from "../api/endpoints";
 import { useCart } from "../context/CartContext";
@@ -20,6 +20,7 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [selectedSize, setSelectedSize] = useState(""); // label of the chosen size variant, if any
   const [added, setAdded] = useState(false);
   const [addError, setAddError] = useState("");
   const [adding, setAdding] = useState(false);
@@ -29,7 +30,12 @@ export default function ProductDetail() {
     setActiveImage(0);
     setAdded(false);
     getProductBySlug(slug)
-      .then(setProduct)
+      .then((p) => {
+        setProduct(p);
+        // Default to the first available size, so the price shown always
+        // matches what "Add to Bag" would actually charge.
+        setSelectedSize(p?.sizeVariants?.[0]?.label || "");
+      })
       .catch(() => setProduct(null))
       .finally(() => setLoading(false));
   }, [slug]);
@@ -57,9 +63,15 @@ export default function ProductDetail() {
     );
   }
 
+  const hasSizeVariants = product.sizeVariants?.length > 0;
+  const activeVariant = hasSizeVariants
+    ? product.sizeVariants.find((v) => v.label === selectedSize) || product.sizeVariants[0]
+    : null;
+  const effectivePrice = activeVariant ? activeVariant.price : product.price;
+
   const discount =
-    product.mrp && product.mrp > product.price
-      ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
+    product.mrp && product.mrp > effectivePrice
+      ? Math.round(((product.mrp - effectivePrice) / product.mrp) * 100)
       : 0;
 
   const attrs = Object.entries(product.attributes || {}).filter(([, v]) => v);
@@ -67,7 +79,7 @@ export default function ProductDetail() {
   const handleAddToCart = async () => {
     setAddError("");
     setAdding(true);
-    const result = await addItem(product, quantity);
+    const result = await addItem(product, quantity, activeVariant?.label || "");
     setAdding(false);
     if (result.success) {
       setAdded(true);
@@ -115,7 +127,7 @@ export default function ProductDetail() {
 
           <div className="flex items-center gap-3 mt-5">
             <span className="text-2xl font-medium text-ink">
-              ₹{product.price?.toLocaleString("en-IN")}
+              ₹{effectivePrice?.toLocaleString("en-IN")}
             </span>
             {discount > 0 && (
               <>
@@ -126,6 +138,31 @@ export default function ProductDetail() {
               </>
             )}
           </div>
+
+          {hasSizeVariants && (
+            <div className="mt-6 max-w-xs">
+              <label className="text-xs uppercase tracking-wide text-muted">
+                Size <span className="text-ink">({activeVariant?.label})</span>
+              </label>
+              <div className="relative mt-2">
+                <select
+                  value={activeVariant?.label || ""}
+                  onChange={(e) => setSelectedSize(e.target.value)}
+                  className="w-full appearance-none border border-line rounded-full px-5 py-3 text-sm text-ink bg-transparent focus:border-ink outline-none cursor-pointer"
+                >
+                  {product.sizeVariants.map((v) => (
+                    <option key={v.label} value={v.label}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={16}
+                  className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
+                />
+              </div>
+            </div>
+          )}
 
           {product.description && (
             <p className="text-sm text-muted leading-relaxed mt-6 max-w-md">{product.description}</p>

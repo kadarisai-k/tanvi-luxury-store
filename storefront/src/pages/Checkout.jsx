@@ -375,14 +375,15 @@ export default function Checkout() {
         <div className="bg-line/30 p-7 h-fit">
           <h2 className="font-display text-xl text-ink mb-5">Order summary</h2>
           <div className="flex flex-col gap-3 mb-5">
-            {items.map(({ _id, product, quantity, photoShareMethod }) => (
+            {items.map(({ _id, product, quantity, photoShareMethod, sizeLabel, sizePrice }) => (
               <div key={_id} className="flex justify-between text-sm">
                 <span className="text-ink/80">
                   {product.title} × {quantity}
+                  {sizeLabel && <span className="text-muted"> ({sizeLabel})</span>}
                   {photoShareMethod === "drive" && <span className="text-gold-600"> · photos linked</span>}
                   {photoShareMethod === "whatsapp" && <span className="text-gold-600"> · photos via WhatsApp</span>}
                 </span>
-                <span className="text-ink">₹{(product.price * quantity).toLocaleString("en-IN")}</span>
+                <span className="text-ink">₹{((sizePrice ?? product.price) * quantity).toLocaleString("en-IN")}</span>
               </div>
             ))}
           </div>

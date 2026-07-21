@@ -56,7 +56,8 @@ async function loadCartForOrder(userId) {
     if (item.product.stock < item.quantity) {
       throw new ApiError(400, `Insufficient stock for ${item.product.title}`);
     }
-    const lineTotal = item.product.price * item.quantity;
+    const effectivePrice = item.sizePrice ?? item.product.price;
+    const lineTotal = effectivePrice * item.quantity;
     const gstPercent = item.product.category?.gstPercent || 0;
     // GST is always calculated server-side from the category's rate at the
     // time of order - never trust a GST amount sent from the frontend.
@@ -68,7 +69,8 @@ async function loadCartForOrder(userId) {
       title: item.product.title,
       image: item.product.images?.[0]?.url || "",
       category: item.product.category?.slug || item.product.category?.toString(),
-      price: item.product.price,
+      price: effectivePrice,
+      sizeLabel: item.sizeLabel || "",
       quantity: item.quantity,
       gstPercent,
       gstAmount,
@@ -109,7 +111,7 @@ const createRazorpayOrderForCart = asyncHandler(async (req, res) => {
     if (item.product.stock < item.quantity) {
       throw new ApiError(400, `Insufficient stock for ${item.product.title}`);
     }
-    const lineTotal = item.product.price * item.quantity;
+    const lineTotal = (item.sizePrice ?? item.product.price) * item.quantity;
     const gstPercent = item.product.category?.gstPercent || 0;
     subtotal += lineTotal;
     gstTotal += Math.round((lineTotal * gstPercent) / 100);

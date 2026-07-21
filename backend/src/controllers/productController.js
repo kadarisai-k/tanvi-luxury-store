@@ -225,6 +225,29 @@ const getHomeSections = asyncHandler(async (req, res) => {
 // shouldn't silently make a brand-new product show as out of stock.
 const DEFAULT_STOCK = 999;
 
+const sizeVariantSchema = z.object({
+  label: z.string().min(1),
+  price: z.coerce.number().positive(),
+});
+
+// Sent from the admin form as a JSON string (FormData can't carry nested
+// arrays directly, same reason removeImageIds is a JSON string below).
+// Blank/undefined -> no size variants, which is the normal case for
+// Kitchen/Jewellery products.
+const parseSizeVariants = (raw) => {
+  if (raw === undefined || raw === null || raw === "") return [];
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new ApiError(400, "Invalid size variants.");
+  }
+  if (!Array.isArray(parsed) || parsed.length > 8) {
+    throw new ApiError(400, "A product can have at most 8 size variants.");
+  }
+  return parsed.map((v) => sizeVariantSchema.parse(v));
+};
+
 const productSchema = z.object({
   title: z.string().min(2),
   description: z.string().optional().default(""),
@@ -246,6 +269,7 @@ const productSchema = z.object({
 
 const createProduct = asyncHandler(async (req, res) => {
   const data = productSchema.parse(req.body);
+  const sizeVariants = parseSizeVariants(req.body.sizeVariants);
   const category = await Category.findOne({ slug: data.categorySlug });
   if (!category) throw new ApiError(400, "Invalid category");
 
@@ -266,6 +290,7 @@ const createProduct = asyncHandler(async (req, res) => {
     images,
     price: data.price,
     mrp: data.mrp,
+    sizeVariants,
     stock: data.stock ?? DEFAULT_STOCK,
     sku: data.sku,
     isFeatured: data.isFeatured,
@@ -306,6 +331,10 @@ const updateProduct = asyncHandler(async (req, res) => {
   ["material", "dimensions", "weight", "color", "capacity"].forEach((attr) => {
     if (req.body[attr] !== undefined) product.attributes[attr] = req.body[attr];
   });
+
+  if (req.body.sizeVariants !== undefined) {
+    product.sizeVariants = parseSizeVariants(req.body.sizeVariants);
+  }
 
   if (req.body.categorySlug) {
     const category = await Category.findOne({ slug: req.body.categorySlug });

@@ -8,6 +8,11 @@ const imageSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const sizeVariantSchema = new mongoose.Schema(
+  { label: { type: String, required: true, trim: true }, price: { type: Number, required: true, min: 0 } },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
@@ -17,6 +22,19 @@ const productSchema = new mongoose.Schema(
     images: { type: [imageSchema], default: [] },
     price: { type: Number, required: true, min: 0 },
     mrp: { type: Number, min: 0 },
+    // Photo Frames / Photo Albums only: up to 8 selectable sizes, each with
+    // its own price (e.g. "A5 (9.5x6)" -> 799). When present, this is what
+    // the storefront's size dropdown is built from, and `price` above just
+    // becomes the "starting from" / default price shown before a size is
+    // picked. Empty for every other category.
+    sizeVariants: {
+      type: [sizeVariantSchema],
+      default: [],
+      validate: {
+        validator: (arr) => arr.length <= 8,
+        message: "A product can have at most 8 size variants.",
+      },
+    },
     stock: { type: Number, required: true, default: 0, min: 0 },
     sku: { type: String, trim: true },
     attributes: {

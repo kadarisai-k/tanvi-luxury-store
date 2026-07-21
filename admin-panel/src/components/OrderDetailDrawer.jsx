@@ -119,6 +119,7 @@ export default function OrderDetailDrawer({ order, onClose, onUpdated }) {
                         <div className="text-sm text-ink-950 truncate">{item.title}</div>
                         <div className="text-xs text-ink-950/50">
                           Qty {item.quantity}
+                          {item.sizeLabel && ` · Size: ${item.sizeLabel}`}
                           {item.gstPercent > 0 && ` · GST ${item.gstPercent}%`}
                         </div>
                       </div>

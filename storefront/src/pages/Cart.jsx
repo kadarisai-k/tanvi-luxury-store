@@ -282,7 +282,8 @@ export default function Cart() {
 
         <div className="divide-y divide-line border-y border-line">
           {items.map((item) => {
-            const { product, quantity, _id } = item;
+            const { product, quantity, _id, sizeLabel, sizePrice } = item;
+            const effectivePrice = sizePrice ?? product.price;
             const isCustomPhoto = CUSTOM_PHOTO_CATEGORIES.includes(product.category?.slug);
             return (
               <div
@@ -297,7 +298,8 @@ export default function Cart() {
                 />
                 <div className="flex-1 min-w-[140px]">
                   <h3 className="font-display text-lg text-ink truncate">{product.title}</h3>
-                  <p className="text-sm text-muted mt-1">₹{product.price?.toLocaleString("en-IN")}</p>
+                  {sizeLabel && <p className="text-xs text-muted mt-0.5">Size: {sizeLabel}</p>}
+                  <p className="text-sm text-muted mt-1">₹{effectivePrice?.toLocaleString("en-IN")}</p>
                   {isCustomPhoto && (
                     <AddPhotosControl
                       item={item}
@@ -327,7 +329,7 @@ export default function Cart() {
                     </button>
                   </div>
                   <div className="w-16 sm:w-20 text-right text-sm font-medium text-ink shrink-0">
-                    ₹{(product.price * quantity).toLocaleString("en-IN")}
+                    ₹{(effectivePrice * quantity).toLocaleString("en-IN")}
                   </div>
                   <button
                     onClick={() => removeItem(_id)}

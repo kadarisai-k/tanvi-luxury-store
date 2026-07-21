@@ -73,6 +73,7 @@ export function CartProvider({ children }) {
                 quantity: i.quantity,
                 driveLink: i.driveLink || "",
                 photoShareMethod: i.photoShareMethod || "",
+                sizeLabel: i.sizeLabel || "",
               }))
             )
           : await getServerCart();
@@ -94,10 +95,10 @@ export function CartProvider({ children }) {
   // clean; two additions of the same product merge into one line as long as
   // neither already has a photo-share choice attached (see updatePhotoShare).
   const addItem = useCallback(
-    async (product, quantity = 1) => {
+    async (product, quantity = 1, sizeLabel = "") => {
       if (isAuthenticated) {
         try {
-          const cart = await addToServerCart(product._id, quantity);
+          const cart = await addToServerCart(product._id, quantity, sizeLabel);
           setItems(cart.items || []);
           return { success: true };
         } catch (err) {
@@ -110,16 +111,35 @@ export function CartProvider({ children }) {
           };
         }
       }
+      // Guests: resolve the size locally the same way the backend would, so
+      // the locked-in price shown in the bag matches what the server will
+      // charge once this cart is synced up after login.
+      const variant = product.sizeVariants?.find((v) => v.label === sizeLabel);
+      const sizePrice = variant ? variant.price : null;
       setItems((prev) => {
         const existing = prev.find(
-          (i) => i.product._id === product._id && !i.photoShareMethod
+          (i) =>
+            i.product._id === product._id &&
+            !i.photoShareMethod &&
+            (i.sizeLabel || "") === (sizeLabel || "")
         );
         if (existing) {
           return prev.map((i) =>
             i._id === existing._id ? { ...i, quantity: i.quantity + quantity } : i
           );
         }
-        return [...prev, { _id: makeLocalItemId(), product, quantity, driveLink: "", photoShareMethod: "" }];
+        return [
+          ...prev,
+          {
+            _id: makeLocalItemId(),
+            product,
+            quantity,
+            driveLink: "",
+            photoShareMethod: "",
+            sizeLabel: sizeLabel || "",
+            sizePrice,
+          },
+        ];
       });
       return { success: true };
     },
@@ -209,13 +229,14 @@ export function CartProvider({ children }) {
     if (!isAuthenticated) writeLocalCart([]);
   }, [isAuthenticated]);
 
-  const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  const subtotal = items.reduce((sum, i) => sum + (i.sizePrice ?? i.product.price) * i.quantity, 0);
   // GST is calculated per item from its category's rate (set in the admin panel).
   // This is a display estimate only - the backend always recalculates and is
   // the source of truth for the amount actually charged.
   const gstTotal = items.reduce((sum, i) => {
     const gstPercent = i.product.category?.gstPercent || 0;
-    return sum + Math.round((i.product.price * i.quantity * gstPercent) / 100);
+    const price = i.sizePrice ?? i.product.price;
+    return sum + Math.round((price * i.quantity * gstPercent) / 100);
   }, 0);
   const total = subtotal + gstTotal;
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);

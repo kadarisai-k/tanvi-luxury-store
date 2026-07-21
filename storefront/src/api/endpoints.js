@@ -37,8 +37,10 @@ export const syncCart = (items) => api.post("/cart/sync", { items }).then((r) =>
 
 // Nothing photo-related is collected here - that choice (Drive link vs
 // WhatsApp) is made afterwards on the Cart page. See updateServerCartItem.
-export const addToServerCart = (productId, quantity) =>
-  api.post("/cart/add", { productId, quantity }).then((r) => r.data.cart);
+// sizeLabel is only meaningful for Photo Frames / Photo Albums products
+// that have sizeVariants - ignored server-side otherwise.
+export const addToServerCart = (productId, quantity, sizeLabel) =>
+  api.post("/cart/add", { productId, quantity, sizeLabel }).then((r) => r.data.cart);
 
 // itemId is the cart line item's own _id (not the product id) - a product can
 // appear as multiple lines once different photo-share choices are attached.

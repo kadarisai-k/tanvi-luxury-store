@@ -8,6 +8,9 @@ const orderItemSchema = new mongoose.Schema(
     category: String, // slug snapshot, useful for category-wise reports
     price: Number,
     quantity: Number,
+    // Photo Frames / Photo Albums only: which size was ordered (e.g. "A5
+    // (9.5x6)"). `price` above already reflects that size's price.
+    sizeLabel: { type: String, default: "" },
     gstPercent: { type: Number, default: 0 }, // category's GST rate at time of order
     gstAmount: { type: Number, default: 0 }, // GST charged on this line (price * qty * gstPercent / 100)
     // Google Drive link the customer supplied for Photo Frames / Photo Albums

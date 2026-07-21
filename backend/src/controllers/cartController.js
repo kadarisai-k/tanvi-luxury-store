@@ -42,6 +42,20 @@ function resolvePhotoShare({ photoShareMethod, driveLink }) {
   return { photoShareMethod: "", driveLink: "" };
 }
 
+// Photo Frames / Photo Albums only. Given the size label the customer picked
+// on the product page, finds that variant on the product and returns its
+// price to lock in on the cart line - so later admin price edits don't
+// silently change what's already sitting in someone's bag. Products with no
+// sizeVariants (every other category) just skip this entirely.
+function resolveSizeSelection(product, sizeLabel) {
+  if (!product.sizeVariants?.length) return { sizeLabel: "", sizePrice: null };
+  const label = (sizeLabel || "").trim();
+  if (!label) throw new ApiError(400, "Please choose a size.");
+  const variant = product.sizeVariants.find((v) => v.label === label);
+  if (!variant) throw new ApiError(400, "That size is no longer available for this product.");
+  return { sizeLabel: variant.label, sizePrice: variant.price };
+}
+
 const getCart = asyncHandler(async (req, res) => {
   let cart = await Cart.findOne({ user: req.user._id }).populate({ path: "items.product", populate: { path: "category" } });
   if (!cart) return res.json({ success: true, cart: { items: [] } });
@@ -59,9 +73,11 @@ const getCart = asyncHandler(async (req, res) => {
 });
 
 const addToCart = asyncHandler(async (req, res) => {
-  const { productId, quantity = 1 } = req.body;
+  const { productId, quantity = 1, sizeLabel: rawSizeLabel } = req.body;
   const product = await Product.findById(productId);
   if (!product || !product.isActive) throw new ApiError(404, "Product not found");
+
+  const { sizeLabel, sizePrice } = resolveSizeSelection(product, rawSizeLabel);
 
   let cart = await Cart.findOne({ user: req.user._id });
   if (!cart) cart = new Cart({ user: req.user._id, items: [] });
@@ -71,12 +87,16 @@ const addToCart = asyncHandler(async (req, res) => {
   // same product only merge if neither has a photo-share choice attached yet -
   // once a choice is made on one line (see updateCartItem), adding the same
   // product again starts a fresh, separate line rather than silently
-  // overwriting that choice.
+  // overwriting that choice. Different sizes always stay as separate lines
+  // too, same reasoning - they're effectively different purchasable items.
   const existing = cart.items.find(
-    (i) => i.product.toString() === productId && !i.photoShareMethod
+    (i) =>
+      i.product.toString() === productId &&
+      !i.photoShareMethod &&
+      (i.sizeLabel || "") === sizeLabel
   );
   if (existing) existing.quantity += Number(quantity);
-  else cart.items.push({ product: productId, quantity: Number(quantity) });
+  else cart.items.push({ product: productId, quantity: Number(quantity), sizeLabel, sizePrice });
 
   await cart.save();
   await cart.populate({ path: "items.product", populate: { path: "category" } });
@@ -124,11 +144,17 @@ const removeFromCart = asyncHandler(async (req, res) => {
 
 // Merge a guest's localStorage cart into the DB right after login.
 const syncCart = asyncHandler(async (req, res) => {
-  const { items } = req.body; // [{ productId, quantity, driveLink, photoShareMethod }]
+  const { items } = req.body; // [{ productId, quantity, driveLink, photoShareMethod, sizeLabel }]
   let cart = await Cart.findOne({ user: req.user._id });
   if (!cart) cart = new Cart({ user: req.user._id, items: [] });
 
-  for (const { productId, quantity, driveLink: rawDriveLink, photoShareMethod: rawMethod } of items || []) {
+  for (const {
+    productId,
+    quantity,
+    driveLink: rawDriveLink,
+    photoShareMethod: rawMethod,
+    sizeLabel: rawSizeLabel,
+  } of items || []) {
     const product = await Product.findById(productId);
     if (!product || !product.isActive) continue; // silently skip - product may have gone since
 
@@ -140,14 +166,24 @@ const syncCart = asyncHandler(async (req, res) => {
       // just drop that item's photo-share choice and keep the product/qty.
     }
 
+    let sizeLabel = "";
+    let sizePrice = null;
+    try {
+      ({ sizeLabel, sizePrice } = resolveSizeSelection(product, rawSizeLabel));
+    } catch {
+      // Similarly, a since-removed size shouldn't block login - drop the
+      // size choice for this line rather than failing the whole sync.
+    }
+
     const existing = cart.items.find(
       (i) =>
         i.product.toString() === productId &&
         (i.photoShareMethod || "") === resolved.photoShareMethod &&
-        (i.driveLink || "") === resolved.driveLink
+        (i.driveLink || "") === resolved.driveLink &&
+        (i.sizeLabel || "") === sizeLabel
     );
     if (existing) existing.quantity += quantity;
-    else cart.items.push({ product: productId, quantity, ...resolved });
+    else cart.items.push({ product: productId, quantity, sizeLabel, sizePrice, ...resolved });
   }
 
   await cart.save();

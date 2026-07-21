@@ -17,9 +17,14 @@ const emptyForm = {
   isFeatured: false,
 };
 
+const MAX_SIZE_VARIANTS = 8;
+const emptySizeVariant = { label: "", price: "" };
+
 export default function ProductFormModal({ categorySlug, product, onClose, onSaved }) {
   const isEdit = !!product;
+  const showSizeVariants = categorySlug === "photo_frames" || categorySlug === "photo_albums";
   const [form, setForm] = useState(emptyForm);
+  const [sizeVariants, setSizeVariants] = useState([]);
   const [newImages, setNewImages] = useState([]); // File objects
   const [newPreviews, setNewPreviews] = useState([]);
   const [existingImages, setExistingImages] = useState([]); // {url, publicId}
@@ -44,6 +49,9 @@ export default function ProductFormModal({ categorySlug, product, onClose, onSav
         isFeatured: product.isFeatured || false,
       });
       setExistingImages(product.images || []);
+      setSizeVariants(
+        (product.sizeVariants || []).map((v) => ({ label: v.label, price: String(v.price) }))
+      );
     }
   }, [product]);
 
@@ -75,6 +83,20 @@ export default function ProductFormModal({ categorySlug, product, onClose, onSav
     );
   };
 
+  const addSizeVariant = () => {
+    setSizeVariants((prev) =>
+      prev.length >= MAX_SIZE_VARIANTS ? prev : [...prev, { ...emptySizeVariant }]
+    );
+  };
+
+  const updateSizeVariant = (idx, field, value) => {
+    setSizeVariants((prev) => prev.map((v, i) => (i === idx ? { ...v, [field]: value } : v)));
+  };
+
+  const removeSizeVariant = (idx) => {
+    setSizeVariants((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -83,6 +105,21 @@ export default function ProductFormModal({ categorySlug, product, onClose, onSav
     if (remainingExisting + newImages.length === 0) {
       setError("Add at least one product image.");
       return;
+    }
+
+    // Only rows the admin actually filled in count - a blank row left over
+    // from clicking "+ Add size" is just dropped rather than blocking save.
+    const cleanedSizeVariants = sizeVariants
+      .map((v) => ({ label: v.label.trim(), price: v.price }))
+      .filter((v) => v.label || v.price);
+
+    if (showSizeVariants) {
+      for (const v of cleanedSizeVariants) {
+        if (!v.label || !v.price || Number(v.price) <= 0) {
+          setError("Each size needs both a label and a price greater than 0.");
+          return;
+        }
+      }
     }
 
     setSaving(true);
@@ -100,6 +137,12 @@ export default function ProductFormModal({ categorySlug, product, onClose, onSav
       fd.append("color", form.color);
       fd.append("capacity", form.capacity);
       fd.append("isFeatured", form.isFeatured);
+      if (showSizeVariants) {
+        fd.append(
+          "sizeVariants",
+          JSON.stringify(cleanedSizeVariants.map((v) => ({ label: v.label, price: Number(v.price) })))
+        );
+      }
       newImages.forEach((file) => fd.append("images", file));
 
       if (isEdit) {
@@ -143,7 +186,14 @@ export default function ProductFormModal({ categorySlug, product, onClose, onSav
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Price (₹)" name="price" type="number" value={form.price} onChange={handleChange} required />
+            <Field
+              label={showSizeVariants ? "Default price (₹)" : "Price (₹)"}
+              name="price"
+              type="number"
+              value={form.price}
+              onChange={handleChange}
+              required
+            />
             <Field label="MRP (₹)" name="mrp" type="number" value={form.mrp} onChange={handleChange} />
             <Field
               label="Stock"
@@ -154,6 +204,59 @@ export default function ProductFormModal({ categorySlug, product, onClose, onSav
               placeholder={isEdit ? "" : "Leave blank for full stock"}
             />
           </div>
+
+          {showSizeVariants && (
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-ink-950/80">
+                  Sizes &amp; prices (up to {MAX_SIZE_VARIANTS})
+                </label>
+                {sizeVariants.length < MAX_SIZE_VARIANTS && (
+                  <button
+                    type="button"
+                    onClick={addSizeVariant}
+                    className="text-xs font-medium text-plum-700 hover:text-plum-800"
+                  >
+                    + Add size
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-ink-950/40 mt-1 mb-2">
+                Customers pick one of these on the product page and the price updates to match. Leave
+                empty if this product doesn't come in multiple sizes - the "Default price" above will
+                be used instead.
+              </p>
+              {sizeVariants.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {sizeVariants.map((v, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <input
+                        value={v.label}
+                        onChange={(e) => updateSizeVariant(idx, "label", e.target.value)}
+                        placeholder={`e.g. A5 (9.5 x 6) Small Horizontal`}
+                        className="flex-1 rounded-lg border border-line px-3.5 py-2.5 text-sm focus:border-plum-600 outline-none"
+                      />
+                      <input
+                        type="number"
+                        value={v.price}
+                        onChange={(e) => updateSizeVariant(idx, "price", e.target.value)}
+                        placeholder="Price (₹)"
+                        className="w-32 rounded-lg border border-line px-3.5 py-2.5 text-sm focus:border-plum-600 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeSizeVariant(idx)}
+                        className="text-ink-950/40 hover:text-danger p-1"
+                        title="Remove size"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <Field label="SKU" name="sku" value={form.sku} onChange={handleChange} />
 
