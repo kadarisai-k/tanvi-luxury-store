@@ -18,7 +18,7 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink-950">Dashboard</h1>
           <p className="text-sm text-ink-950/50 mt-0.5">Today's snapshot, at a glance.</p>

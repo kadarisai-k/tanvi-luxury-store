@@ -9,6 +9,7 @@ import {
   Percent,
   Home as HomeIcon,
   LogOut,
+  X,
 } from "lucide-react";
 import { useAdminAuth } from "../context/AdminAuthContext";
 
@@ -19,10 +20,11 @@ const categoryLinks = [
   { to: "/products/photo_albums", label: "Photo Albums", icon: BookImage },
 ];
 
-function NavItem({ to, label, Icon }) {
+function NavItem({ to, label, Icon, onNavigate }) {
   return (
     <NavLink
       to={to}
+      onClick={onNavigate}
       className={({ isActive }) =>
         `flex items-center gap-3 px-4 py-2.5 rounded-xl2 text-sm font-medium transition-colors ${
           isActive
@@ -37,56 +39,84 @@ function NavItem({ to, label, Icon }) {
   );
 }
 
-export default function Sidebar() {
+// `open`/`onClose` only matter on mobile (below the `lg` breakpoint), where
+// the sidebar becomes an off-canvas drawer instead of always taking up
+// screen width. On desktop it's simply always visible, same as before.
+export default function Sidebar({ open, onClose }) {
   const { admin, logout } = useAdminAuth();
 
   return (
-    <aside className="w-64 shrink-0 bg-surface border-r border-line h-screen sticky top-0 flex flex-col">
-      <div className="px-6 py-6 border-b border-line">
-        <div className="font-display text-xl font-semibold text-ink-950 tracking-tight">
-          Tanvi
-        </div>
-        <div className="text-xs uppercase tracking-[0.14em] text-gold-600 font-medium mt-0.5">
-          Luxury Store — Admin
-        </div>
-      </div>
+    <>
+      {/* Dimmed backdrop behind the drawer, mobile only. Tapping it closes
+          the menu, same as tapping outside any dropdown. */}
+      {open && (
+        <div
+          className="fixed inset-0 bg-ink-950/40 z-40 lg:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
 
-      <nav className="flex-1 px-3 py-5 flex flex-col gap-1 overflow-y-auto">
-        <NavItem to="/" label="Dashboard" Icon={LayoutDashboard} />
-
-        <div className="mt-5 mb-1 px-4 text-[11px] font-semibold uppercase tracking-wider text-ink-950/40">
-          Products
+      <aside
+        className={`w-64 shrink-0 bg-surface border-r border-line h-screen flex flex-col fixed top-0 left-0 z-50 transition-transform duration-200 lg:sticky lg:translate-x-0 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="px-6 py-6 border-b border-line flex items-center justify-between">
+          <div>
+            <div className="font-display text-xl font-semibold text-ink-950 tracking-tight">
+              Tanvi
+            </div>
+            <div className="text-xs uppercase tracking-[0.14em] text-gold-600 font-medium mt-0.5">
+              Luxury Store — Admin
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="lg:hidden text-ink-950/50 hover:text-ink-950 p-1"
+            aria-label="Close menu"
+          >
+            <X size={20} />
+          </button>
         </div>
-        {categoryLinks.map((c) => (
-          <NavItem key={c.to} to={c.to} label={c.label} Icon={c.icon} />
-        ))}
 
-        <div className="mt-5 mb-1 px-4 text-[11px] font-semibold uppercase tracking-wider text-ink-950/40">
-          Sales
+        <nav className="flex-1 px-3 py-5 flex flex-col gap-1 overflow-y-auto">
+          <NavItem to="/" label="Dashboard" Icon={LayoutDashboard} onNavigate={onClose} />
+
+          <div className="mt-5 mb-1 px-4 text-[11px] font-semibold uppercase tracking-wider text-ink-950/40">
+            Products
+          </div>
+          {categoryLinks.map((c) => (
+            <NavItem key={c.to} to={c.to} label={c.label} Icon={c.icon} onNavigate={onClose} />
+          ))}
+
+          <div className="mt-5 mb-1 px-4 text-[11px] font-semibold uppercase tracking-wider text-ink-950/40">
+            Sales
+          </div>
+          <NavItem to="/orders" label="Orders" Icon={Package} onNavigate={onClose} />
+
+          <div className="mt-5 mb-1 px-4 text-[11px] font-semibold uppercase tracking-wider text-ink-950/40">
+            Tax
+          </div>
+          <NavItem to="/settings/gst" label="GST" Icon={Percent} onNavigate={onClose} />
+
+          <div className="mt-5 mb-1 px-4 text-[11px] font-semibold uppercase tracking-wider text-ink-950/40">
+            Store
+          </div>
+          <NavItem to="/home-page-edits" label="Home Page Edits" Icon={HomeIcon} onNavigate={onClose} />
+        </nav>
+
+        <div className="px-3 py-4 border-t border-line">
+          <div className="px-4 py-2 text-sm text-ink-950/60 truncate">{admin?.email}</div>
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl2 text-sm font-medium text-danger hover:bg-danger/10 transition-colors"
+          >
+            <LogOut size={18} />
+            Log out
+          </button>
         </div>
-        <NavItem to="/orders" label="Orders" Icon={Package} />
-
-        <div className="mt-5 mb-1 px-4 text-[11px] font-semibold uppercase tracking-wider text-ink-950/40">
-          Tax
-        </div>
-        <NavItem to="/settings/gst" label="GST" Icon={Percent} />
-
-        <div className="mt-5 mb-1 px-4 text-[11px] font-semibold uppercase tracking-wider text-ink-950/40">
-          Store
-        </div>
-        <NavItem to="/home-page-edits" label="Home Page Edits" Icon={HomeIcon} />
-      </nav>
-
-      <div className="px-3 py-4 border-t border-line">
-        <div className="px-4 py-2 text-sm text-ink-950/60 truncate">{admin?.email}</div>
-        <button
-          onClick={logout}
-          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl2 text-sm font-medium text-danger hover:bg-danger/10 transition-colors"
-        >
-          <LogOut size={18} />
-          Log out
-        </button>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
