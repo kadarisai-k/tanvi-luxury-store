@@ -19,6 +19,15 @@ const { notFound, errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
 
+// Render (like most hosts) sits the app behind a reverse proxy, which sets
+// X-Forwarded-For to the real client IP. Without this, express-rate-limit
+// can't safely tell requests apart by IP - it either throws (as seen in
+// logs) or, worse, silently shares one rate-limit bucket across every
+// visitor. `1` means "trust exactly one hop of proxy" (Render's own edge),
+// which is the correct, most restrictive setting here.
+app.set("trust proxy", 1);
+
+
 app.use(helmet());
 app.use(
   cors({
