@@ -29,6 +29,14 @@ const sendOtp = asyncHandler(async (req, res) => {
   }
 
   const otp = customerAuth.issueOtp(normalizedEmail);
+  // Logged here as a temporary safety net: until a real domain is
+  // authenticated (SPF/DKIM/DMARC) with Brevo, some inboxes (Gmail
+  // especially) may delay/defer emails from a brand-new sender by minutes
+  // to hours. This lets you find the code in Render's Logs tab and keep
+  // testing without waiting on delivery. Safe to remove once email
+  // deliverability is reliably fast - this never appears in the app itself,
+  // only in Render's server-side logs.
+  console.log(`[otp] Code for ${normalizedEmail}: ${otp}`);
   const { sent, devFallback } = await sendOtpEmail(normalizedEmail, otp);
 
   const response = { success: true, message: `OTP sent to ${normalizedEmail}`, sent };
